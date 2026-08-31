@@ -149,7 +149,7 @@ void encode_RS(rs_t *rs, uint8_t *out, uint8_t *inp)
 
     Edit: this function accepts data in the polynomial form and overwrites the input buffer
 */
-void decode_RS(rs_t *rs, int8_t *inp)
+rs_status_t decode_RS(rs_t *rs, int8_t *inp)
 {
   int elp[(rs->n) - (rs->k) + 2][(rs->n) - (rs->k)], d[(rs->n) - (rs->k) + 2], l[(rs->n) - (rs->k) + 2], u_lu[(rs->n) - (rs->k) + 2], s[(rs->n) - (rs->k) + 1];
   int count = 0, syn_error = 0, root[rs->t], loc[rs->t], z[rs->t + 1], err[rs->n], reg[rs->t + 1];
@@ -348,6 +348,7 @@ void decode_RS(rs_t *rs, int8_t *inp)
             inp[loc[i]] ^= err[loc[i]]; /*inp[i] must be in polynomial form */
           }
         }
+        return RS_CORRECTED;
       }
       else                          /* no. roots != degree of elp => >rs->t errors and cars->not solve */
       {
@@ -358,6 +359,7 @@ void decode_RS(rs_t *rs, int8_t *inp)
           else
             inp[i] = 0; /* just output received codeword as is */
         }
+        return RS_UNCORRECTABLE;
       }
     }
     else                          /* elp has degree has degree >rs->t hence cars->not solve */
@@ -369,6 +371,7 @@ void decode_RS(rs_t *rs, int8_t *inp)
         else
           inp[i] = 0; /* just output received codeword as is */
       }
+      return RS_UNCORRECTABLE;
     }
   }
   else /* no non-zero syndromes => no errors: output received codeword */
@@ -380,5 +383,6 @@ void decode_RS(rs_t *rs, int8_t *inp)
       else
         inp[i] = 0;
     }
+    return RS_NO_ERROR;
   }
 }

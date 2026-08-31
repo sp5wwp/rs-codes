@@ -26,11 +26,18 @@ typedef struct
     int g[MAX_ITEMS];       //generator polynomial
 } rs_t;
 
+typedef enum
+{
+    RS_NO_ERROR,
+    RS_CORRECTED,
+    RS_UNCORRECTABLE
+} rs_status_t;
+
 void gen_GF(rs_t *rs);
 void gen_poly(rs_t *rs);
 void init_RS(rs_t *rs, uint8_t cw_len, uint8_t dt_len, uint8_t *poly);
 void encode_RS(rs_t *rs, uint8_t *out, uint8_t *inp);
-void decode_RS(rs_t *rs, int8_t *inp);
+rs_status_t decode_RS(rs_t *rs, int8_t *inp);
 
 #ifdef __cplusplus
 }

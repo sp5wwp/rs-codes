@@ -27,7 +27,7 @@ int main(void)
 
     encode_RS(&rs, pty, data);
 
-    printf("data: ");
+    printf("  data: ");
     for(uint8_t i=0; i<rs.k; i++) printf("%d ", data[i]);
     printf("\n");
 
@@ -38,21 +38,28 @@ int main(void)
     memcpy(&cword[0], data, sizeof(data));
     memcpy(&cword[9], pty, sizeof(pty));
 
-    printf("encd: ");
+    //encoded
+    printf("  encd: ");
     for(uint8_t i=0; i<rs.n; i++) printf("%d ", cword[i]);
     printf("\n");
 
-    //error
+    //apply errors
     cword[3]=0;
-    printf("recd: ");
+    cword[12]=5;
+
+    //received
+    printf("  recd: ");
     for(uint8_t i=0; i<rs.n; i++) printf("%d ", cword[i]);
     printf("\n");
 
-    decode_RS(&rs, cword);
+    rs_status_t r = decode_RS(&rs, cword);
 
-    printf("decd: ");
+    //decoded
+    printf("  decd: ");
     for(uint8_t i=0; i<rs.n; i++) printf("%d ", cword[i]);
     printf("\n");
+
+    printf("    RS: %u\n", r); //expected: 1
 
     return 0;
 }
