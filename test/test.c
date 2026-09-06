@@ -7,13 +7,19 @@
 rs_t rs;
 uint8_t poly[]={1,1,0,0,1}; //dec=19 (ascending exponent order)
 
+//use a real-world example
 uint8_t data[9]={6, 15, 8, 9, 8, 3, 0, 0, 5};
 uint8_t pty[6]={0}; //should hold {0 12 11 2 0 9} after coding
-int8_t cword[15]={0};
+uint8_t cword[15]={0};
 
 int main(void)
 {
-    init_RS(&rs, 15, 9, poly);
+    rs_init_t rv = init_RS(&rs, 15, 9, poly);
+    if (rv != RS_INIT_OK)
+    {
+        printf("init_RS() error: %u\n", rv);
+        return 1;
+    }
 
     //indexes dump
     /*printf("indx: ");

@@ -4,7 +4,7 @@
 // Based on Simon Rockliff's code, 26th June 1991
 //
 // Wojciech Kaczmarski, SP5WWP
-// 29 September 2024
+// 6 September 2026
 //--------------------------------------------------------------------
 #include "rs.h"
 
@@ -74,11 +74,43 @@ void gen_poly(rs_t *rs)
 /*
     Init the RS de/encoder
 */
-void init_RS(rs_t *rs, uint8_t cw_len, uint8_t dt_len, uint8_t *poly)
+rs_init_t init_RS(rs_t *rs, uint8_t cw_len, uint8_t dt_len, uint8_t *poly)
 {
-  // TODO: add required assertions here
+  // avoid underflow below
+  if (cw_len <= dt_len)
+    return RS_INIT_CW_DT_MISMATCH;
+  
+  // t must be a whole number
+  if ((cw_len - dt_len) % 2 != 0)
+    return RS_INIT_T_ODD;
 
-  rs->m = log2(cw_len + 1);
+  // k >= 1
+  if (dt_len == 0)
+    return RS_INIT_K_ZERO;
+
+  // cw_len+1 must be a power of 2
+  if ((cw_len & (cw_len + 1)) != 0)
+    return RS_INIT_CW_LEN_POW_2;
+
+  // compute log2(cw_len+1)
+#if defined(__GNUC__) || defined(__clang__)
+  rs->m = 31 - __builtin_clz(cw_len + 1);
+#elif defined(_MSC_VER)
+  unsigned long index;
+  _BitScanReverse(&index, cw_len + 1);
+  rs->m = index;
+#else
+  // software fallback fallback for other compilers
+  uint32_t count = 0;
+  uint32_t value = cw_len + 1;
+  while ((value & 0x80000000) == 0)
+  {
+    count++;
+    value <<= 1;
+  }
+  rs->m = 31 - count;
+#endif
+
   rs->n = cw_len;
   rs->t = (cw_len - dt_len) / 2;
   rs->k = cw_len - 2 * rs->t;
@@ -86,6 +118,8 @@ void init_RS(rs_t *rs, uint8_t cw_len, uint8_t dt_len, uint8_t *poly)
 
   gen_GF(rs);
   gen_poly(rs);
+
+  return RS_INIT_OK;
 }
 
 /*
@@ -149,22 +183,23 @@ void encode_RS(rs_t *rs, uint8_t *out, uint8_t *inp)
 
     Edit: this function accepts data in the polynomial form and overwrites the input buffer
 */
-rs_status_t decode_RS(rs_t *rs, int8_t *inp)
+rs_status_t decode_RS(rs_t *rs, uint8_t *inp)
 {
   int elp[(rs->n) - (rs->k) + 2][(rs->n) - (rs->k)], d[(rs->n) - (rs->k) + 2], l[(rs->n) - (rs->k) + 2], u_lu[(rs->n) - (rs->k) + 2], s[(rs->n) - (rs->k) + 1];
   int count = 0, syn_error = 0, root[rs->t], loc[rs->t], z[rs->t + 1], err[rs->n], reg[rs->t + 1];
+  int idx[rs->n];
 
   // convert to polynomial form
   for(uint8_t i = 0; i < (rs->n); i++)
-    inp[i] = rs->index[inp[i]];
+    idx[i] = rs->index[inp[i]];
 
   /* first form the syndromes */
   for(uint8_t i = 1; i <= (rs->n) - (rs->k); i++)
   {
     s[i] = 0;
     for(uint8_t j = 0; j < rs->n; j++)
-      if(inp[j] != -1)
-        s[i] ^= rs->alpha[(inp[j] + i * j) % rs->n]; /* inp[j] in index form */
+      if(idx[j] != -1)
+        s[i] ^= rs->alpha[(idx[j] + i * j) % rs->n]; /* idx[j] in index form */
                                                      /* convert syndrome from polynomial form to index form  */
     if(s[i] != 0)
       syn_error = 1; /* set flag if non-zero syndrome => error */
@@ -280,7 +315,7 @@ rs_status_t decode_RS(rs_t *rs, int8_t *inp)
         reg[i] = elp[u][i];
       }
       count = 0;
-      for(uint8_t i = 1; i <= rs->n; i++)
+      for(uint32_t i = 1; i <= rs->n; i++)
       {
         uint8_t q = 1;
         for(uint8_t j = 1; j <= l[u]; j++)
@@ -321,8 +356,8 @@ rs_status_t decode_RS(rs_t *rs, int8_t *inp)
         for(uint8_t i = 0; i < rs->n; i++)
         {
           err[i] = 0;
-          if (inp[i] != -1) /* convert inp[] to polynomial form */
-            inp[i] = rs->alpha[inp[i]];
+          if (idx[i] != -1) /* convert inp[] to polynomial form */
+            inp[i] = rs->alpha[idx[i]];
           else
             inp[i] = 0;
         }
@@ -337,7 +372,7 @@ rs_status_t decode_RS(rs_t *rs, int8_t *inp)
           if(err[loc[i]] != 0)
           {
             err[loc[i]] = rs->index[err[loc[i]]];
-            uint8_t q = 0; /* form denominator of error term */
+            uint32_t q = 0; /* form denominator of error term */
             for(uint8_t j = 0; j < l[u]; j++)
             {
               if(j != i)
@@ -354,8 +389,8 @@ rs_status_t decode_RS(rs_t *rs, int8_t *inp)
       {
         for(uint8_t i = 0; i < rs->n; i++) /* could return error flag if desired */
         {
-          if(inp[i] != -1)         /* convert inp[] to polynomial form */
-            inp[i] = rs->alpha[inp[i]];
+          if(idx[i] != -1)         /* convert inp[] to polynomial form */
+            inp[i] = rs->alpha[idx[i]];
           else
             inp[i] = 0; /* just output received codeword as is */
         }
@@ -366,8 +401,8 @@ rs_status_t decode_RS(rs_t *rs, int8_t *inp)
     {
       for(uint8_t i = 0; i < rs->n; i++) /* could return error flag if desired */
       {
-        if(inp[i] != -1)         /* convert inp[] to polynomial form */
-          inp[i] = rs->alpha[inp[i]];
+        if(idx[i] != -1)         /* convert inp[] to polynomial form */
+          inp[i] = rs->alpha[idx[i]];
         else
           inp[i] = 0; /* just output received codeword as is */
       }
@@ -378,8 +413,8 @@ rs_status_t decode_RS(rs_t *rs, int8_t *inp)
   {
     for(uint8_t i = 0; i < rs->n; i++)
     {
-      if(inp[i] != -1) /* convert inp[] to polynomial form */
-        inp[i] = rs->alpha[inp[i]];
+      if(idx[i] != -1) /* convert inp[] to polynomial form */
+        inp[i] = rs->alpha[idx[i]];
       else
         inp[i] = 0;
     }
